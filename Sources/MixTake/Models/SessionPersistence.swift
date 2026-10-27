@@ -109,6 +109,26 @@ struct SessionManifest: Codable {
 enum SessionStore {
     static let manifestName = "Session.plist"
 
+    static func replacePackage<Result>(
+        at destination: URL,
+        build: (URL) throws -> Result
+    ) throws -> Result {
+        let fileManager = FileManager.default
+        let staging = destination.deletingLastPathComponent().appendingPathComponent(
+            ".MixTake-save-\(UUID().uuidString).mixtake",
+            isDirectory: true
+        )
+        defer { try? fileManager.removeItem(at: staging) }
+
+        let result = try build(staging)
+        if fileManager.fileExists(atPath: destination.path) {
+            _ = try fileManager.replaceItemAt(destination, withItemAt: staging)
+        } else {
+            try fileManager.moveItem(at: staging, to: destination)
+        }
+        return result
+    }
+
     static func read(from packageURL: URL) throws -> SessionManifest {
         let data = try Data(contentsOf: packageURL.appendingPathComponent(manifestName))
         let manifest = try PropertyListDecoder().decode(SessionManifest.self, from: data)

@@ -836,34 +836,34 @@ final class AppModel: NSObject, ObservableObject {
         do {
             let fileManager = FileManager.default
             let sourceDirectory = take.directory
-            let packageDirectory: URL
-            if currentSessionURL == nil {
-                packageDirectory = sourceDirectory
-            } else if saveAs, sourceDirectory.standardizedFileURL != destination.standardizedFileURL {
-                if fileManager.fileExists(atPath: destination.path) {
-                    try fileManager.removeItem(at: destination)
-                }
-                try fileManager.copyItem(at: sourceDirectory, to: destination)
-                packageDirectory = destination
-            } else {
-                packageDirectory = sourceDirectory
+            let writesToNewDestination =
+                sourceDirectory.standardizedFileURL != destination.standardizedFileURL &&
+                (currentSessionURL == nil || saveAs)
+            let writePackage: (URL) throws -> SessionManifest = { packageDirectory in
+                let embeddedBackingTrack = try self.embedBackingTrack(in: packageDirectory)
+                let manifest = try self.makeSessionManifest(
+                    take: take,
+                    backingTrackURL: embeddedBackingTrack,
+                    playbackPosition: playbackPosition
+                )
+                try SessionStore.write(manifest, to: packageDirectory)
+                return manifest
             }
 
-            let embeddedBackingTrack = try embedBackingTrack(in: packageDirectory)
-            let manifest = try makeSessionManifest(
-                take: take,
-                backingTrackURL: embeddedBackingTrack,
-                playbackPosition: playbackPosition
-            )
-            try SessionStore.write(manifest, to: packageDirectory)
-
-            var finalDirectory = packageDirectory
-            if currentSessionURL == nil {
-                if fileManager.fileExists(atPath: destination.path) {
-                    try fileManager.removeItem(at: destination)
+            let manifest: SessionManifest
+            let finalDirectory: URL
+            if writesToNewDestination {
+                manifest = try SessionStore.replacePackage(at: destination) { staging in
+                    try fileManager.copyItem(at: sourceDirectory, to: staging)
+                    return try writePackage(staging)
                 }
-                try fileManager.moveItem(at: packageDirectory, to: destination)
                 finalDirectory = destination
+                if currentSessionURL == nil {
+                    try? fileManager.removeItem(at: sourceDirectory)
+                }
+            } else {
+                manifest = try writePackage(sourceDirectory)
+                finalDirectory = sourceDirectory
             }
             Task {
                 await adoptSession(
