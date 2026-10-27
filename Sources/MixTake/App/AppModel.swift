@@ -945,12 +945,17 @@ final class AppModel: NSObject, ObservableObject {
 
         backingTrack.remove()
         if let savedBacking = manifest.backingTrack, let backingURL {
-            try await backingTrack.restore(
-                url: backingURL,
-                startTime: savedBacking.startTime,
-                syncAdjustment: savedBacking.syncAdjustment,
-                volume: savedBacking.volume
-            )
+            do {
+                try await backingTrack.restore(
+                    url: backingURL,
+                    startTime: savedBacking.startTime,
+                    syncAdjustment: savedBacking.syncAdjustment,
+                    volume: savedBacking.volume
+                )
+            } catch {
+                await resetAfterFailedSessionLoad()
+                throw error
+            }
         }
         let take = RecordingTake(
             directory: directory,
@@ -969,22 +974,35 @@ final class AppModel: NSObject, ObservableObject {
             }
         )
         currentTake = take
-        Task {
-            let failures = await audioEffects.replaceAllEffects(with: chains)
-            do {
-                try await playback.load(take: take)
-                playback.seek(to: manifest.playbackPosition)
-                currentSessionURL = directory
-                sessionHasUnsavedChanges = false
-                hasExportedCurrentTake = false
-                state = .ready
-                rebuildRealtimeAudioGraph(resumeTransport: false)
-                presentEffectRestoreFailures(failures)
-            } catch {
-                state = .empty
-                present(error)
-            }
+        currentSessionURL = directory
+        sessionHasUnsavedChanges = false
+        let failures = await audioEffects.replaceAllEffects(with: chains)
+        do {
+            try await playback.load(take: take)
+            playback.seek(to: manifest.playbackPosition)
+            hasExportedCurrentTake = false
+            state = .ready
+            rebuildRealtimeAudioGraph(resumeTransport: false)
+            presentEffectRestoreFailures(failures)
+        } catch {
+            await resetAfterFailedSessionLoad()
+            throw error
         }
+    }
+
+    private func resetAfterFailedSessionLoad() async {
+        _ = await audioEffects.replaceAllEffects(with: [:])
+        playback.unload()
+        realtimeAudio.stopTake()
+        realtimeAudio.stopBackingTrack()
+        backingTrack.remove()
+        currentTake = nil
+        currentSessionURL = nil
+        sessionHasUnsavedChanges = false
+        hasExportedCurrentTake = false
+        outputMeter.reset()
+        state = .empty
+        rebuildRealtimeAudioGraph(resumeTransport: false)
     }
 
     private func adoptSession(
