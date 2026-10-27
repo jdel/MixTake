@@ -1,0 +1,91 @@
+name: MixTake Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set release version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          echo "version=${version}" >> "$GITHUB_ENV"
+          echo "asset=build/MixTake_${version}_macos.zip" >> "$GITHUB_ENV"
+          /usr/libexec/PlistBuddy \
+            -c "Set :CFBundleShortVersionString ${version}" \
+            Resources/Info.plist
+          /usr/libexec/PlistBuddy \
+            -c "Set :CFBundleVersion ${GITHUB_RUN_NUMBER}" \
+            Resources/Info.plist
+
+      - name: Build and package MixTake
+        run: make
+
+      - name: Verify application
+        shell: bash
+        run: |
+          file build/MixTake.app/Contents/MacOS/MixTake | grep -q arm64
+          cmp build/app-icon/Assets.car build/MixTake.app/Contents/Resources/Assets.car
+          cmp build/app-icon/MixTake.icns build/MixTake.app/Contents/Resources/MixTake.icns
+          codesign --verify --deep --strict build/MixTake.app
+          bundled_version=$(/usr/libexec/PlistBuddy \
+            -c "Print :CFBundleShortVersionString" \
+            build/MixTake.app/Contents/Info.plist)
+          test "$bundled_version" = "$version"
+          mv build/MixTake.zip "$asset"
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$asset" \
+            --verify-tag \
+            --title "MixTake ${GITHUB_REF_NAME}" \
+            --generate-notes
+
+      - name: Create Homebrew tap token
+        id: tap-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.JDEL_CROSS_REPO_PUSHER_CLIENT_ID }}
+          private-key: ${{ secrets.JDEL_CROSS_REPO_PUSHER_PRIVATE_KEY }}
+          owner: "jdel"
+          repositories: "homebrew-tap"
+
+      - name: Publish mixtake cask
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.tap-token.outputs.token }}
+        run: |
+          sha256=$(shasum -a 256 "$asset" | awk '{print $1}')
+          tap="$RUNNER_TEMP/homebrew-tap"
+          git clone --depth 1 \
+            "https://x-access-token:${GH_TOKEN}@github.com/jdel/homebrew-tap.git" \
+            "$tap"
+          sed \
+            -e "s/{{VERSION}}/${version}/g" \
+            -e "s/{{SHA256}}/${sha256}/g" \
+            .github/casks/mixtake.rb.tmpl > "$tap/Casks/mixtake.rb"
+          cd "$tap"
+          git config user.name "mixtake[bot]"
+          git config user.email "noreply@jdel.org"
+          git add Casks/mixtake.rb
+          if ! git diff --cached --quiet; then
+            git commit -m "mixtake ${version}"
+            git push
+          fi

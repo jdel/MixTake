@@ -1,0 +1,19 @@
+cask "mixtake" do
+  version "{{VERSION}}"
+  sha256 "{{SHA256}}"
+
+  url "https://github.com/jdel/MixTake/releases/download/v#{version}/MixTake_#{version}_macos.zip",
+      verified: "github.com/jdel/MixTake/"
+  name "MixTake"
+  desc "Record video with multichannel Core Audio and live Audio Unit effects"
+  homepage "https://github.com/jdel/MixTake"
+
+  depends_on arch: :arm64
+  app "MixTake.app"
+
+  # MixTake is ad-hoc signed but not notarized.
+  postflight do
+    system_command "/usr/bin/xattr",
+                   args: ["-dr", "com.apple.quarantine", "#{appdir}/MixTake.app"]
+  end
+end

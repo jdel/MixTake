@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>MixTake</string>
+    <key>CFBundleIdentifier</key>
+    <string>org.jdel.mixtake</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleIconFile</key>
+    <string>MixTake</string>
+    <key>CFBundleIconName</key>
+    <string>MixTake</string>
+    <key>CFBundleName</key>
+    <string>MixTake</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.0.1</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.music</string>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>MixTake Session</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>org.jdel.mixtake.session</string>
+            </array>
+        </dict>
+    </array>
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>com.apple.package</string>
+            </array>
+            <key>UTTypeDescription</key>
+            <string>MixTake Session</string>
+            <key>UTTypeIcons</key>
+            <dict/>
+            <key>UTTypeIdentifier</key>
+            <string>org.jdel.mixtake.session</string>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>mixtake</string>
+                </array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+            <key>UTTypeDescription</key>
+            <string>MixTake Channel Preset</string>
+            <key>UTTypeIcons</key>
+            <dict/>
+            <key>UTTypeIdentifier</key>
+            <string>org.jdel.mixtake.channel-preset</string>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>mixtakepreset</string>
+                </array>
+            </dict>
+        </dict>
+    </array>
+    <key>NSCameraUsageDescription</key>
+    <string>MixTake uses the selected camera to record video.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>MixTake records the channels you select from your audio interface.</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>MixTakeBuildDate</key>
+    <string>development build</string>
+</dict>
+</plist>
