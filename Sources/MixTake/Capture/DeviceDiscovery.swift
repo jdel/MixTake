@@ -55,6 +55,20 @@ enum DeviceDiscovery {
         return cameras.first(where: { $0.id == preferredID })?.id ?? cameras.first?.id
     }
 
+    static func matchingIdentifier(
+        id: String,
+        name: String,
+        candidates: [(id: String, name: String)]
+    ) -> String? {
+        if let exactMatch = candidates.first(where: { $0.id == id }) {
+            return exactMatch.id
+        }
+        let nameMatches = candidates.filter {
+            $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame
+        }
+        return nameMatches.count == 1 ? nameMatches[0].id : nil
+    }
+
     static func audioInterfaces() -> [AudioInterface] {
         let captureDevices = AVCaptureDevice.DiscoverySession(
             deviceTypes: [.microphone, .external],
@@ -62,21 +76,22 @@ enum DeviceDiscovery {
             position: .unspecified
         ).devices.filter { $0.isConnected && !$0.isSuspended }
         let coreDevices = coreAudioDevices()
+        let inputDevices = coreDevices.filter { $0.inputChannels > 0 }
+        let inputIdentities = inputDevices.map { (id: $0.uid, name: $0.name) }
 
         var interfaces: [AudioInterface] = []
         for captureDevice in captureDevices {
             let captureID = captureDevice.uniqueID
             let captureName = captureDevice.localizedName
-            var matchingDevice: CoreDevice?
-            for coreDevice in coreDevices {
-                let identifiersMatch = coreDevice.uid == captureID
-                let namesMatch = coreDevice.name.localizedCaseInsensitiveCompare(captureName) == .orderedSame
-                if identifiersMatch || namesMatch {
-                    matchingDevice = coreDevice
-                    break
-                }
+            let matchingID = matchingIdentifier(
+                id: captureID,
+                name: captureName,
+                candidates: inputIdentities
+            )
+            guard let matchingID,
+                  let matchingDevice = inputDevices.first(where: { $0.uid == matchingID }) else {
+                continue
             }
-            guard let matchingDevice, matchingDevice.inputChannels > 0 else { continue }
             interfaces.append(
                 AudioInterface(
                     id: matchingDevice.uid,
@@ -94,15 +109,13 @@ enum DeviceDiscovery {
 
         var defaultInterface: AudioInterface?
         if let defaultID = defaultInputDeviceID(),
-           let defaultDevice = coreDevices.first(where: { $0.deviceID == defaultID }) {
-            for interface in interfaces {
-                let identifiersMatch = interface.id == defaultDevice.uid
-                let namesMatch = interface.name.localizedCaseInsensitiveCompare(defaultDevice.name) == .orderedSame
-                if identifiersMatch || namesMatch {
-                    defaultInterface = interface
-                    break
-                }
-            }
+           let defaultDevice = coreDevices.first(where: { $0.deviceID == defaultID }),
+           let matchingID = matchingIdentifier(
+               id: defaultDevice.uid,
+               name: defaultDevice.name,
+               candidates: interfaces.map { (id: $0.id, name: $0.name) }
+           ) {
+            defaultInterface = interfaces.first { $0.id == matchingID }
         }
         if defaultInterface == nil,
            let captureDefaultID = AVCaptureDevice.default(for: .audio)?.uniqueID {
