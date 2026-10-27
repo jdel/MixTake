@@ -10,7 +10,7 @@ struct TransportView: View {
         VStack(spacing: 7) {
             if model.state == .ready {
                 HStack(spacing: 8) {
-                    Text(time(playback.currentTime))
+                    Text(Self.time(playback.currentTime))
                         .frame(width: 48, alignment: .trailing)
                     Slider(
                         value: Binding(
@@ -20,7 +20,7 @@ struct TransportView: View {
                         in: 0...max(0.01, playback.duration)
                     )
                     .focusable(false)
-                    Text(time(playback.duration))
+                    Text(Self.time(playback.duration))
                         .frame(width: 48, alignment: .leading)
                 }
                 .font(.caption.monospacedDigit())
@@ -116,7 +116,21 @@ struct TransportView: View {
         case .empty:
             Text("Ready")
         case .recording:
-            Label("Recording", systemImage: "circle.fill").foregroundStyle(.red)
+            TimelineView(
+                .periodic(from: model.recordingStartedAt ?? .now, by: 1)
+            ) { context in
+                HStack(spacing: 6) {
+                    Text(
+                        Self.recordingTime(
+                            startedAt: model.recordingStartedAt,
+                            at: context.date
+                        )
+                    )
+                    .monospacedDigit()
+                    Label("Recording", systemImage: "circle.fill")
+                        .foregroundStyle(.red)
+                }
+            }
         case .finalizing:
             ProgressView().controlSize(.small)
             Text("Finishing")
@@ -128,7 +142,14 @@ struct TransportView: View {
         }
     }
 
-    private func time(_ seconds: Double) -> String {
+    static func recordingTime(startedAt: Date?, at currentTime: Date) -> String {
+        let elapsed = startedAt.map { currentTime.timeIntervalSince($0) } ?? 0
+        let seconds = elapsed.isFinite ? elapsed : 0
+        let total = max(0, Int(seconds))
+        return String(format: "%02d:%02d", total / 60, total % 60)
+    }
+
+    private static func time(_ seconds: Double) -> String {
         guard seconds.isFinite else { return "0:00" }
         let total = max(0, Int(seconds))
         return String(format: "%d:%02d", total / 60, total % 60)

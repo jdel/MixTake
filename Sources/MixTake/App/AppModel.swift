@@ -50,6 +50,7 @@ final class AppModel: NSObject, ObservableObject {
     @Published private(set) var monitoringBufferFrames = 128
     @Published private(set) var currentSessionURL: URL?
     @Published private(set) var sessionHasUnsavedChanges = false
+    @Published private(set) var recordingStartedAt: Date?
 
     private let defaults = UserDefaults.standard
     private var afterStop: AfterStop = .keep
@@ -485,6 +486,7 @@ final class AppModel: NSObject, ObservableObject {
         meterLevels.reset()
         outputMeter.reset()
         afterStop = .keep
+        recordingStartedAt = Date()
         state = .recording
         hasExportedCurrentTake = false
         recordingBackingTrack = backingTrack.reference
@@ -495,6 +497,7 @@ final class AppModel: NSObject, ObservableObject {
         guard state == .recording else { return }
         afterStop = .keep
         state = .finalizing
+        recordingStartedAt = nil
         realtimeAudio.stopBackingTrack()
         backingTrack.stopAndReturnToStart()
         captureEngine.stopRecording()
@@ -507,6 +510,7 @@ final class AppModel: NSObject, ObservableObject {
         case .recording:
             afterStop = .clear
             state = .finalizing
+            recordingStartedAt = nil
             captureEngine.stopRecording()
         case .ready:
             discardCurrentTake()
@@ -522,6 +526,7 @@ final class AppModel: NSObject, ObservableObject {
         case .recording:
             afterStop = .retake
             state = .finalizing
+            recordingStartedAt = nil
             captureEngine.stopRecording()
         case .ready:
             discardCurrentTake()
@@ -1289,6 +1294,7 @@ final class AppModel: NSObject, ObservableObject {
         currentSessionURL = nil
         sessionHasUnsavedChanges = false
         recordingBackingTrack = nil
+        recordingStartedAt = nil
         outputMeter.reset()
         hasExportedCurrentTake = false
         state = .empty
@@ -1614,6 +1620,7 @@ extension AppModel: CaptureEngineDelegate {
 
     nonisolated func captureEngine(_ engine: CaptureEngine, didFinish take: RecordingTake) {
         Task { @MainActor in
+            recordingStartedAt = nil
             var shouldRetake = false
             switch afterStop {
             case .keep:
@@ -1666,6 +1673,7 @@ extension AppModel: CaptureEngineDelegate {
             realtimeAudio.stopBackingTrack()
             backingTrack.stopAndReturnToStart()
             recordingBackingTrack = nil
+            recordingStartedAt = nil
             state = currentTake == nil ? .empty : .ready
             present(error)
             applyPendingDeviceRefresh()
