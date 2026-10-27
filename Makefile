@@ -33,6 +33,11 @@ LEGACY_ICON_FILES := \
 SWIFT_SOURCES := $(shell find Sources -type f -name '*.swift' -print)
 SWIFT_SOURCE_DIRECTORIES := $(shell find Sources -type d -print)
 ACTOOL := $(shell command -v xcrun >/dev/null 2>&1 && xcrun --find actool 2>/dev/null)
+SWIFT_EXECUTABLE := $(shell xcrun --find swift)
+# Swift 6.4's swiftbuild backend uses incorrect Swift Testing search paths with
+# Command Line Tools 27. Remove this workaround after Apple ships the fix:
+# https://github.com/swiftlang/swift-package-manager/issues/10557
+SWIFT_TESTING_PLUGIN_PATH := $(patsubst %/bin/swift,%/lib/swift/host/plugins/testing,$(SWIFT_EXECUTABLE))
 
 ifneq ($(ACTOOL),)
 APP_ICON_DEPENDENCIES := $(ASSET_CATALOG) $(FALLBACK_ICON)
@@ -43,11 +48,16 @@ endif
 .DEFAULT_GOAL := all
 .DELETE_ON_ERROR:
 
-.PHONY: all app clean clean-all
+.PHONY: all app test clean clean-all
 
 all: $(ARCHIVE)
 
 app: $(APP_EXECUTABLE)
+
+test:
+	@"$(SWIFT_EXECUTABLE)" test \
+		-Xswiftc -plugin-path \
+		-Xswiftc "$(SWIFT_TESTING_PLUGIN_PATH)"
 
 $(SWIFT_BINARY_DIRECTORY) $(LEGACY_ICONSET) $(ICON_DIRECTORY):
 	@mkdir -p "$@"
@@ -84,7 +94,7 @@ $(ASSET_CATALOG): $(MODERN_ICON_SOURCES) | $(ICON_DIRECTORY)
 		--enable-on-demand-resources NO \
 		--development-region en \
 		--target-device mac \
-		--minimum-deployment-target 13.0 \
+		--minimum-deployment-target 15.0 \
 		--platform macosx \
 		--standalone-icon-behavior all
 	@test -f "$@"

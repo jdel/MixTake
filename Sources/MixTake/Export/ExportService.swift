@@ -46,6 +46,7 @@ enum ExportService {
         try copyReplacing(take.videoURL, to: destination.appendingPathComponent("video.mp4"))
         completedItems += 1
         progress(Double(completedItems) / Double(itemCount))
+        let videoAsset = AVURLAsset(url: take.videoURL)
         for (channel, source) in take.channelURLs.sorted(by: { $0.key < $1.key }) {
             let filename = String(format: "channel-%02d.wav", channel + 1)
             let outputURL = destination.appendingPathComponent(filename)
@@ -60,7 +61,7 @@ enum ExportService {
                             effects: channelEffects
                         )
                     ],
-                    duration: AVURLAsset(url: take.videoURL).duration.seconds,
+                    duration: try await videoAsset.load(.duration).seconds,
                     destination: outputURL,
                     progress: scaledProgress(
                         progress,
@@ -92,12 +93,12 @@ enum ExportService {
                             effects: backingEffects
                         )
                     ],
-                    duration: AVURLAsset(url: take.videoURL).duration.seconds,
+                    duration: try await videoAsset.load(.duration).seconds,
                     destination: outputURL,
                     progress: backingProgress
                 )
             } else {
-                try exportBackingTrack(
+                try await exportBackingTrack(
                     backingTrack,
                     videoURL: take.videoURL,
                     destination: outputURL,
@@ -179,7 +180,8 @@ enum ExportService {
         destination: URL,
         progress: @escaping ProgressHandler
     ) async throws {
-        let videoDuration = AVURLAsset(url: take.videoURL).duration.seconds
+        let videoAsset = AVURLAsset(url: take.videoURL)
+        let videoDuration = try await videoAsset.load(.duration).seconds
         var sources = take.channelURLs.sorted(by: { $0.key < $1.key }).map { channel, url in
             OfflineMixSource(
                 url: url,
@@ -228,9 +230,12 @@ enum ExportService {
             presetName: AVAssetExportPresetAppleM4A
         ) else { throw ExportError.cannotCreateExporter }
         try? FileManager.default.removeItem(at: destination)
-        exporter.outputURL = destination
-        exporter.outputFileType = .m4a
-        try await run(exporter, progress: progress)
+        try await run(
+            exporter,
+            to: destination,
+            as: .m4a,
+            progress: progress
+        )
     }
 
     private static func renderStereoMix(
@@ -303,6 +308,7 @@ enum ExportService {
                     ),
                     atRate: file.processingFormat.sampleRate
                 ),
+                completionCallbackType: .dataConsumed,
                 completionHandler: nil
             )
             scheduled.append((player, file))
@@ -393,27 +399,29 @@ enum ExportService {
         let composition = AVMutableComposition()
         let videoAsset = AVURLAsset(url: video)
         let audioAsset = AVURLAsset(url: audio)
-        guard let sourceVideo = videoAsset.tracks(withMediaType: .video).first,
+        guard let sourceVideo = try await videoAsset.loadTracks(withMediaType: .video).first,
               let destinationVideo = composition.addMutableTrack(
                 withMediaType: .video,
                 preferredTrackID: kCMPersistentTrackID_Invalid
               ) else { throw ExportError.missingVideoTrack }
+        let videoDuration = try await videoAsset.load(.duration)
         try destinationVideo.insertTimeRange(
-            CMTimeRange(start: .zero, duration: videoAsset.duration),
+            CMTimeRange(start: .zero, duration: videoDuration),
             of: sourceVideo,
             at: .zero
         )
-        destinationVideo.preferredTransform = sourceVideo.preferredTransform
+        destinationVideo.preferredTransform = try await sourceVideo.load(.preferredTransform)
 
-        if let sourceAudio = audioAsset.tracks(withMediaType: .audio).first,
+        if let sourceAudio = try await audioAsset.loadTracks(withMediaType: .audio).first,
            let destinationAudio = composition.addMutableTrack(
             withMediaType: .audio,
             preferredTrackID: kCMPersistentTrackID_Invalid
            ) {
+            let audioDuration = try await audioAsset.load(.duration)
             try destinationAudio.insertTimeRange(
                 CMTimeRange(
                     start: .zero,
-                    duration: CMTimeMinimum(videoAsset.duration, audioAsset.duration)
+                    duration: CMTimeMinimum(videoDuration, audioDuration)
                 ),
                 of: sourceAudio,
                 at: .zero
@@ -425,36 +433,35 @@ enum ExportService {
             asset: composition,
             presetName: AVAssetExportPresetPassthrough
         ) else { throw ExportError.cannotCreateExporter }
-        exporter.outputURL = destination
-        exporter.outputFileType = .mp4
         exporter.shouldOptimizeForNetworkUse = true
-        try await run(exporter, progress: progress)
+        try await run(
+            exporter,
+            to: destination,
+            as: .mp4,
+            progress: progress
+        )
     }
 
     private static func run(
         _ exporter: AVAssetExportSession,
+        to destination: URL,
+        as fileType: AVFileType,
         progress: @escaping ProgressHandler
     ) async throws {
         progress(0)
+        let states = exporter.states(updateInterval: 0.1)
         let progressMonitor = Task {
-            while !Task.isCancelled {
-                progress(Double(exporter.progress))
-                try? await Task.sleep(nanoseconds: 100_000_000)
-            }
-        }
-        defer { progressMonitor.cancel() }
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            exporter.exportAsynchronously {
-                switch exporter.status {
-                case .completed:
-                    continuation.resume()
-                case .failed, .cancelled:
-                    continuation.resume(throwing: exporter.error ?? ExportError.exportFailed("unknown error"))
-                default:
-                    continuation.resume(throwing: ExportError.exportFailed("unexpected exporter state"))
+            for await state in states {
+                guard !Task.isCancelled else { return }
+                if case .exporting(let exportProgress) = state {
+                    progress(exportProgress.fractionCompleted)
                 }
             }
         }
+        defer { progressMonitor.cancel() }
+        try await exporter.export(to: destination, as: fileType)
+        progressMonitor.cancel()
+        await progressMonitor.value
         progress(1)
     }
 
@@ -502,7 +509,7 @@ enum ExportService {
         videoURL: URL,
         destination: URL,
         progress: ProgressHandler
-    ) throws {
+    ) async throws {
         let source = try AVAudioFile(forReading: backingTrack.sourceURL)
         let format = source.processingFormat
         let startFrame = AVAudioFramePosition(
@@ -510,7 +517,8 @@ enum ExportService {
         )
         source.framePosition = min(startFrame, source.length)
 
-        let videoDuration = AVURLAsset(url: videoURL).duration.seconds
+        let videoAsset = AVURLAsset(url: videoURL)
+        let videoDuration = try await videoAsset.load(.duration).seconds
         let targetFrames = AVAudioFramePosition(max(0, videoDuration * format.sampleRate))
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatLinearPCM,

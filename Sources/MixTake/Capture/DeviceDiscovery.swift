@@ -35,7 +35,7 @@ enum DeviceDiscovery {
 
     static func cameras() -> [CameraDevice] {
         let session = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.builtInWideAngleCamera, .externalUnknown],
+            deviceTypes: [.builtInWideAngleCamera, .external],
             mediaType: .video,
             position: .unspecified
         )
@@ -57,7 +57,7 @@ enum DeviceDiscovery {
 
     static func audioInterfaces() -> [AudioInterface] {
         let captureDevices = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.builtInMicrophone, .externalUnknown],
+            deviceTypes: [.microphone, .external],
             mediaType: .audio,
             position: .unspecified
         ).devices.filter { $0.isConnected && !$0.isSuspended }

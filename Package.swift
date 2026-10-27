@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "MixTake",
     platforms: [
-        .macOS(.v13)
+        .macOS("15.0")
     ],
     products: [
         .executable(name: "MixTake", targets: ["MixTake"])
@@ -14,6 +14,10 @@ let package = Package(
         .executableTarget(
             name: "MixTake",
             path: "Sources/MixTake"
+        ),
+        .testTarget(
+            name: "MixTakeTests",
+            dependencies: ["MixTake"]
         )
     ],
     swiftLanguageVersions: [.v5]

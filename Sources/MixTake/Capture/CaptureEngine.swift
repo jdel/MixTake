@@ -42,6 +42,19 @@ final class CaptureEngine: NSObject {
             .appendingPathComponent("MixTake", isDirectory: true)
     }
 
+    static func recordingHostTime(
+        for captureTime: CMTime,
+        captureClock: CMClock?,
+        hostClock: CMClock
+    ) -> CMTime {
+        guard let captureClock else { return CMClockGetTime(hostClock) }
+        return CMSyncConvertTime(
+            captureTime,
+            from: captureClock,
+            to: hostClock
+        )
+    }
+
     static func removeStaleTemporaryRecordings() {
         try? FileManager.default.removeItem(at: temporaryRoot)
     }
@@ -92,12 +105,12 @@ final class CaptureEngine: NSObject {
             guard let self else { return }
             do {
                 let cameras = AVCaptureDevice.DiscoverySession(
-                    deviceTypes: [.builtInWideAngleCamera, .externalUnknown],
+                    deviceTypes: [.builtInWideAngleCamera, .external],
                     mediaType: .video,
                     position: .unspecified
                 ).devices.filter { $0.isConnected && !$0.isSuspended }
                 let audioDevices = AVCaptureDevice.DiscoverySession(
-                    deviceTypes: [.builtInMicrophone, .externalUnknown],
+                    deviceTypes: [.microphone, .external],
                     mediaType: .audio,
                     position: .unspecified
                 ).devices.filter { $0.isConnected && !$0.isSuspended }
@@ -378,16 +391,11 @@ final class CaptureEngine: NSObject {
         startTime = time
 
         let hostClock = CMClockGetHostTimeClock()
-        let recordingHostTime: CMTime
-        if let captureClock = session.masterClock {
-            recordingHostTime = CMSyncConvertTime(
-                time,
-                from: captureClock,
-                to: hostClock
-            )
-        } else {
-            recordingHostTime = CMClockGetTime(hostClock)
-        }
+        let recordingHostTime = Self.recordingHostTime(
+            for: time,
+            captureClock: session.synchronizationClock,
+            hostClock: hostClock
+        )
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.delegate?.captureEngine(self, didStartAtHostTime: recordingHostTime)

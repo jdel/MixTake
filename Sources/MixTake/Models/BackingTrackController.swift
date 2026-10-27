@@ -44,10 +44,17 @@ final class BackingTrackController: ObservableObject {
         )
     }
 
-    func load(_ url: URL) throws {
+    func load(_ url: URL) async throws {
         let asset = AVURLAsset(url: url)
-        let seconds = asset.duration.seconds
-        guard asset.isPlayable, seconds.isFinite, seconds > 0 else {
+        let seconds: Double
+        let isPlayable: Bool
+        do {
+            seconds = try await asset.load(.duration).seconds
+            isPlayable = try await asset.load(.isPlayable)
+        } catch {
+            throw BackingTrackError.unsupportedFile
+        }
+        guard isPlayable, seconds.isFinite, seconds > 0 else {
             throw BackingTrackError.unsupportedFile
         }
 
@@ -66,8 +73,8 @@ final class BackingTrackController: ObservableObject {
         startTime: Double,
         syncAdjustment: Double,
         volume: Float
-    ) throws {
-        try load(url)
+    ) async throws {
+        try await load(url)
         self.startTime = boundedStartTime(startTime)
         candidateTime = max(0, self.startTime)
         self.syncAdjustment = min(max(-duration, syncAdjustment), duration)

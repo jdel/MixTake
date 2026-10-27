@@ -641,14 +641,16 @@ final class AppModel: NSObject, ObservableObject {
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
-        do {
-            try backingTrack.load(url)
-            synchronizeBackingTrackWithCurrentTake()
-            if currentTake == nil {
-                rebuildRealtimeAudioGraph(resumeTransport: false)
+        Task {
+            do {
+                try await backingTrack.load(url)
+                synchronizeBackingTrackWithCurrentTake()
+                if currentTake == nil {
+                    rebuildRealtimeAudioGraph(resumeTransport: false)
+                }
+            } catch {
+                present(error)
             }
-        } catch {
-            present(error)
         }
     }
 
@@ -715,22 +717,26 @@ final class AppModel: NSObject, ObservableObject {
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            let manifest = try SessionStore.read(from: url)
-            try loadSession(manifest, from: url)
-        } catch {
-            present(error)
+        Task {
+            do {
+                let manifest = try SessionStore.read(from: url)
+                try await loadSession(manifest, from: url)
+            } catch {
+                present(error)
+            }
         }
     }
 
     func openSession(at url: URL) {
         guard state != .recording, state != .finalizing, state != .exporting,
               confirmDiscardingCurrentWorkIfNeeded() else { return }
-        do {
-            let manifest = try SessionStore.read(from: url)
-            try loadSession(manifest, from: url)
-        } catch {
-            present(error)
+        Task {
+            do {
+                let manifest = try SessionStore.read(from: url)
+                try await loadSession(manifest, from: url)
+            } catch {
+                present(error)
+            }
         }
     }
 
@@ -860,17 +866,19 @@ final class AppModel: NSObject, ObservableObject {
                 try fileManager.moveItem(at: packageDirectory, to: destination)
                 finalDirectory = destination
             }
-            adoptSession(
-                manifest,
-                directory: finalDirectory,
-                playbackPosition: playbackPosition
-            )
+            Task {
+                await adoptSession(
+                    manifest,
+                    directory: finalDirectory,
+                    playbackPosition: playbackPosition
+                )
+            }
         } catch {
             present(error)
         }
     }
 
-    private func loadSession(_ manifest: SessionManifest, from directory: URL) throws {
+    private func loadSession(_ manifest: SessionManifest, from directory: URL) async throws {
         let fileManager = FileManager.default
         let videoURL = directory.appendingPathComponent(manifest.videoFileName)
         guard fileManager.fileExists(atPath: videoURL.path) else {
@@ -937,7 +945,7 @@ final class AppModel: NSObject, ObservableObject {
 
         backingTrack.remove()
         if let savedBacking = manifest.backingTrack, let backingURL {
-            try backingTrack.restore(
+            try await backingTrack.restore(
                 url: backingURL,
                 startTime: savedBacking.startTime,
                 syncAdjustment: savedBacking.syncAdjustment,
@@ -964,7 +972,7 @@ final class AppModel: NSObject, ObservableObject {
         Task {
             let failures = await audioEffects.replaceAllEffects(with: chains)
             do {
-                try playback.load(take: take)
+                try await playback.load(take: take)
                 playback.seek(to: manifest.playbackPosition)
                 currentSessionURL = directory
                 sessionHasUnsavedChanges = false
@@ -983,7 +991,7 @@ final class AppModel: NSObject, ObservableObject {
         _ manifest: SessionManifest,
         directory: URL,
         playbackPosition: Double
-    ) {
+    ) async {
         let videoURL = directory.appendingPathComponent(manifest.videoFileName)
         let channels = Dictionary(uniqueKeysWithValues: manifest.channels.map {
             ($0.index, directory.appendingPathComponent($0.fileName))
@@ -1006,7 +1014,7 @@ final class AppModel: NSObject, ObservableObject {
         currentTake = updatedTake
         if let savedBacking = manifest.backingTrack,
            let backingReference {
-            try? backingTrack.restore(
+            try? await backingTrack.restore(
                 url: backingReference.sourceURL,
                 startTime: savedBacking.startTime,
                 syncAdjustment: savedBacking.syncAdjustment,
@@ -1015,7 +1023,7 @@ final class AppModel: NSObject, ObservableObject {
         }
         currentSessionURL = directory
         sessionHasUnsavedChanges = false
-        try? playback.load(take: updatedTake)
+        try? await playback.load(take: updatedTake)
         playback.seek(to: playbackPosition)
         rebuildRealtimeAudioGraph(resumeTransport: false)
     }
@@ -1599,7 +1607,7 @@ extension AppModel: CaptureEngineDelegate {
                 sessionHasUnsavedChanges = false
                 do {
                     outputMeter.reset()
-                    try playback.load(take: completedTake)
+                    try await playback.load(take: completedTake)
                 } catch {
                     outputMeter.reset()
                     present(error)

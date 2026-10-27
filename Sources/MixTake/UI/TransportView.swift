@@ -157,11 +157,29 @@ private struct ExportProgressWheel: View {
     }
 }
 
+enum BackingTrackTransportActions {
+    static func setStart(using action: () -> Double) {
+        _ = action()
+    }
+
+    static func moveSyncEarlier(from currentAdjustment: Double, using action: (Double) -> Double) {
+        _ = action(currentAdjustment - 0.010)
+    }
+
+    static func moveSyncLater(from currentAdjustment: Double, using action: (Double) -> Double) {
+        _ = action(currentAdjustment + 0.010)
+    }
+
+    static func resetSync(using action: (Double) -> Double) {
+        _ = action(0)
+    }
+}
+
 private struct BackingTrackStartView: View {
     @ObservedObject var backingTrack: BackingTrackController
     let onTogglePreview: () -> Void
     let onCandidateChanged: (Double) -> Void
-    let onSetStart: () -> Void
+    let onSetStart: () -> Double
     let onStartChanged: (Double) -> Double
     let onSyncChanged: (Double) -> Double
     let onRemove: () -> Void
@@ -209,7 +227,7 @@ private struct BackingTrackStartView: View {
 
             Button("Set Start") {
                 NSApp.keyWindow?.makeFirstResponder(nil)
-                onSetStart()
+                BackingTrackTransportActions.setStart(using: onSetStart)
             }
             .controlSize(.small)
             .focusable(false)
@@ -227,7 +245,10 @@ private struct BackingTrackStartView: View {
                 systemImage: "minus",
                 help: "Move backing track 10 ms earlier"
             ) {
-                onSyncChanged(backingTrack.syncAdjustment - 0.010)
+                BackingTrackTransportActions.moveSyncEarlier(
+                    from: backingTrack.syncAdjustment,
+                    using: onSyncChanged
+                )
             }
 
             SyncAdjustmentField(
@@ -242,14 +263,17 @@ private struct BackingTrackStartView: View {
                 systemImage: "plus",
                 help: "Move backing track 10 ms later"
             ) {
-                onSyncChanged(backingTrack.syncAdjustment + 0.010)
+                BackingTrackTransportActions.moveSyncLater(
+                    from: backingTrack.syncAdjustment,
+                    using: onSyncChanged
+                )
             }
 
             SyncNudgeButton(
                 systemImage: "arrow.counterclockwise",
                 help: "Reset backing-track sync adjustment"
             ) {
-                onSyncChanged(0)
+                BackingTrackTransportActions.resetSync(using: onSyncChanged)
             }
 
             Button {
@@ -312,12 +336,12 @@ private struct StartTimeField: View {
                 RoundedRectangle(cornerRadius: 3)
                     .stroke(Color.primary.opacity(0.25), lineWidth: 1)
             }
-            .onChange(of: isFocused) { focused in
+            .onChange(of: isFocused) { _, focused in
                 if !focused {
                     commit()
                 }
             }
-            .onChange(of: startTime) { value in
+            .onChange(of: startTime) { _, value in
                 if !isFocused {
                     editor.draft = Self.formatted(value)
                 }
@@ -423,12 +447,12 @@ private struct SyncAdjustmentField: View {
                 RoundedRectangle(cornerRadius: 3)
                     .stroke(Color.primary.opacity(0.25), lineWidth: 1)
             }
-            .onChange(of: isFocused) { focused in
+            .onChange(of: isFocused) { _, focused in
                 if !focused {
                     commit()
                 }
             }
-            .onChange(of: adjustment) { value in
+            .onChange(of: adjustment) { _, value in
                 if !isFocused {
                     editor.draft = Self.formatted(value)
                 }

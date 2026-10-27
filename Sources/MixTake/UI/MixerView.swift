@@ -490,12 +490,12 @@ private struct GainValueField: View {
             .help("Reset hardware input gain to 0 dB")
             .accessibilityLabel("Reset input gain")
         }
-        .onChange(of: isFocused) { focused in
+        .onChange(of: isFocused) { _, focused in
             if !focused {
                 commit()
             }
         }
-        .onChange(of: gain.decibels) { decibels in
+        .onChange(of: gain.decibels) { _, decibels in
             if !isFocused {
                 editor.draft = Self.formatted(decibels)
             }

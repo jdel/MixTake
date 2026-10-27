@@ -321,10 +321,13 @@ final class AudioEffectManager: ObservableObject {
         guard !pendingEditorRequests.contains(id) else { return }
         guard let effect = slots[id] else { return }
         pendingEditorRequests.insert(id)
+        let requestIdentity = ObjectIdentifier(effect)
 
         effect.audioUnit.auAudioUnit.requestViewController { [weak self] viewController in
             Task { @MainActor in
-                guard let self, self.slots[id] === effect else { return }
+                guard let self,
+                      let effect = self.slots[id],
+                      ObjectIdentifier(effect) == requestIdentity else { return }
                 self.pendingEditorRequests.remove(id)
                 let controller = viewController ?? NSHostingController(
                     rootView: GenericAudioEffectEditor(audioUnit: effect.audioUnit.auAudioUnit)
@@ -396,10 +399,9 @@ final class AudioEffectManager: ObservableObject {
         window.center()
 
         let delegate = EffectWindowDelegate { [weak self] in
-            guard let self else { return }
-            self.editorWindows[id] = nil
-            self.editorDelegates[id] = nil
-            self.onEffectStateChanged?()
+            // Keep the window and its plug-in controller together for reopening.
+            // closeEditor releases both when the effect itself is removed.
+            self?.onEffectStateChanged?()
         }
         window.delegate = delegate
         editorWindows[id] = window

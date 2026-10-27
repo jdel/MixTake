@@ -26,7 +26,7 @@ levels, and export a finished video or separate files for editing.
 
 ## Getting started
 
-MixTake requires an Apple Silicon Mac running macOS 13 or later.
+MixTake requires an Apple Silicon Mac running macOS 15 or later.
 
 Install with Homebrew:
 

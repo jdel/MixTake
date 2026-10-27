@@ -20,11 +20,13 @@ final class PlaybackController: ObservableObject {
             forInterval: CMTime(value: 1, timescale: 20),
             queue: .main
         ) { [weak self] time in
-            guard let self else { return }
-            self.currentTime = max(0, time.seconds)
-            self.duration = max(0, self.player.currentItem?.duration.seconds ?? 0)
-            self.isPlaying = self.player.rate != 0
-            self.onTimeChanged?(self.currentTime)
+            Task { @MainActor in
+                guard let self else { return }
+                self.currentTime = max(0, time.seconds)
+                self.duration = max(0, self.player.currentItem?.duration.seconds ?? 0)
+                self.isPlaying = self.player.rate != 0
+                self.onTimeChanged?(self.currentTime)
+            }
         }
     }
 
@@ -32,14 +34,15 @@ final class PlaybackController: ObservableObject {
         if let timeObserver { player.removeTimeObserver(timeObserver) }
     }
 
-    func load(take: RecordingTake) throws {
+    func load(take: RecordingTake) async throws {
         let asset = AVURLAsset(url: take.videoURL)
-        guard asset.tracks(withMediaType: .video).first != nil else {
+        guard try await asset.loadTracks(withMediaType: .video).first != nil else {
             throw ExportError.missingVideoTrack
         }
+        let loadedDuration = try await asset.load(.duration)
         let item = AVPlayerItem(asset: asset)
         player.replaceCurrentItem(with: item)
-        duration = max(0, asset.duration.seconds)
+        duration = max(0, loadedDuration.seconds)
         seek(to: 0)
     }
 
