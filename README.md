@@ -24,6 +24,8 @@ levels, and export a finished video or separate files for editing.
 - MP4, mixed audio, and separate-track exports
 - Saved sessions and reusable channel presets
 
+![MixTake recording interface](screenshot.png)
+
 ## Getting started
 
 MixTake requires an Apple Silicon Mac running macOS 15 or later.
