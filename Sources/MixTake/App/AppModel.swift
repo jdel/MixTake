@@ -328,13 +328,13 @@ final class AppModel: NSObject, ObservableObject {
         mixerChannels[index].volume = volume
         defaults.set(volume, forKey: volumeKey(channel))
         realtimeAudio.setVolume(volume, for: .channel(channel))
-        markSessionChanged()
+        markMixChanged()
     }
 
     func setBackingTrackVolume(_ volume: Float) {
         backingTrack.setVolume(volume)
         realtimeAudio.setVolume(volume, for: .backingTrack)
-        markSessionChanged()
+        markMixChanged()
     }
 
     func attachEffect(
@@ -352,8 +352,7 @@ final class AppModel: NSObject, ObservableObject {
                     notify: false
                 )
                 rebuildRealtimeAudioGraph(resumeTransport: true)
-                hasExportedCurrentTake = false
-                markSessionChanged()
+                markMixChanged()
                 audioEffects.showEditor(for: target, slot: slot)
             } catch {
                 present(error)
@@ -1173,7 +1172,7 @@ final class AppModel: NSObject, ObservableObject {
                     to: destination,
                     progress: exportProgressHandler()
                 )
-                hasExportedCurrentTake = true
+                markCurrentTakeExported()
                 finishExport()
             } catch {
                 finishExport()
@@ -1208,7 +1207,7 @@ final class AppModel: NSObject, ObservableObject {
                     to: destination,
                     progress: exportProgressHandler()
                 )
-                hasExportedCurrentTake = true
+                markCurrentTakeExported()
                 finishExport()
                 NSWorkspace.shared.activateFileViewerSelecting([destination])
             } catch {
@@ -1240,7 +1239,7 @@ final class AppModel: NSObject, ObservableObject {
                     to: destination,
                     progress: exportProgressHandler()
                 )
-                hasExportedCurrentTake = true
+                markCurrentTakeExported()
                 finishExport()
             } catch {
                 finishExport()
@@ -1257,6 +1256,10 @@ final class AppModel: NSObject, ObservableObject {
     private func finishExport() {
         exportProgress = 1
         state = .ready
+    }
+
+    func markCurrentTakeExported() {
+        hasExportedCurrentTake = true
     }
 
     private func exportProgressHandler() -> ExportService.ProgressHandler {
@@ -1413,6 +1416,10 @@ final class AppModel: NSObject, ObservableObject {
     }
 
     private func effectStateChanged() {
+        markMixChanged()
+    }
+
+    private func markMixChanged() {
         if currentTake != nil {
             hasExportedCurrentTake = false
         }
@@ -1445,8 +1452,7 @@ final class AppModel: NSObject, ObservableObject {
             backingTrack: updatedBackingTrack
         )
         currentTake = updatedTake
-        hasExportedCurrentTake = false
-        markSessionChanged()
+        markMixChanged()
         rebuildRealtimeAudioGraph(resumeTransport: true)
     }
 

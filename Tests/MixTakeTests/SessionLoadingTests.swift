@@ -100,6 +100,42 @@ struct SessionLoadingTests {
         model.errorMessage = nil
     }
 
+    @Test("Mix changes invalidate a completed export")
+    func mixChangesInvalidateCompletedExport() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Take-\(UUID())", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+
+        let model = AppModel.shared
+        model.discardCurrentTake()
+        model.currentTake = RecordingTake(
+            directory: directory,
+            videoURL: directory.appendingPathComponent("video.mov"),
+            channelURLs: [:],
+            startedAt: Date(),
+            backingTrack: nil
+        )
+        model.mixerChannels = [
+            MixerChannel(index: 0, volume: 1, inputGain: nil)
+        ]
+        defer { model.discardCurrentTake() }
+
+        model.markCurrentTakeExported()
+        #expect(model.terminationWarning == nil)
+
+        model.setVolume(0.5, for: 0)
+        #expect(model.hasExportedCurrentTake == false)
+        #expect(model.terminationWarning != nil)
+
+        model.markCurrentTakeExported()
+        model.setBackingTrackVolume(0.5)
+        #expect(model.hasExportedCurrentTake == false)
+        #expect(model.terminationWarning != nil)
+    }
+
     private static func writeTone(to url: URL) throws {
         let format = try #require(
             AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1)
