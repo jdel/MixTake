@@ -115,7 +115,22 @@ enum SessionStore {
         guard manifest.version == SessionManifest.currentVersion else {
             throw SessionStoreError.unsupportedVersion(manifest.version)
         }
+        let mediaNames = [manifest.videoFileName]
+            + manifest.channels.map(\.fileName)
+            + [manifest.backingTrack?.fileName].compactMap { $0 }
+        for name in mediaNames {
+            try validateMediaName(name)
+        }
         return manifest
+    }
+
+    private static func validateMediaName(_ name: String) throws {
+        guard !name.isEmpty,
+              name != ".",
+              name != "..",
+              URL(fileURLWithPath: name).lastPathComponent == name else {
+            throw SessionStoreError.invalidMediaPath(name)
+        }
     }
 
     static func write(_ manifest: SessionManifest, to packageURL: URL) throws {
@@ -132,6 +147,7 @@ enum SessionStore {
 enum SessionStoreError: LocalizedError {
     case unsupportedVersion(Int)
     case missingMedia(String)
+    case invalidMediaPath(String)
 
     var errorDescription: String? {
         switch self {
@@ -139,6 +155,8 @@ enum SessionStoreError: LocalizedError {
             return "This MixTake session uses unsupported format version \(version)."
         case .missingMedia(let name):
             return "The session is missing \(name)."
+        case .invalidMediaPath(let name):
+            return "The session contains an invalid media path: \(name)."
         }
     }
 }
